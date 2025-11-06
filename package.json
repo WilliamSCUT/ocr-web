@@ -1,0 +1,22 @@
+{
+  "name": "ocr-web",
+  "version": "1.0.0",
+  "description": "Formula OCR Web Application based on PaddleOCR-VL",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:web": "cd web && npm run dev",
+    "build:web": "cd web && npm run build",
+    "build:server": "cd server && npm run build",
+    "start:server": "cd server && npm run start",
+    "test": "cd server && npm test",
+    "install:all": "npm install && cd server && npm install && cd ../web && npm install"
+  },
+  "keywords": ["OCR", "LaTeX", "PaddleOCR", "Formula Recognition"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+
