@@ -2,9 +2,9 @@ import express, { Request, Response } from 'express';
 import multer from 'multer';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { createReadStream } from 'fs';
 import { unlink } from 'fs/promises';
 import path from 'path';
+import rateLimit from 'express-rate-limit';
 
 dotenv.config();
 
@@ -15,10 +15,26 @@ const OCR_MODEL = process.env.OCR_MODEL || 'PaddleOCR-VL-0.9B';
 const OCR_API_KEY = process.env.OCR_API_KEY || '';
 const UPSTREAM_TIMEOUT = parseInt(process.env.UPSTREAM_TIMEOUT || '120000', 10);
 const MAX_FILE_MB = parseInt(process.env.MAX_FILE_MB || '8', 10);
+const STATIC_DIR = path.resolve(__dirname, '../public');
+const SERVE_STATIC = process.env.SERVE_STATIC !== 'false';
+const RATE_WINDOW_MS = parseInt(process.env.RATE_WINDOW_MS || '60000', 10); // 60s
+const RATE_MAX = parseInt(process.env.RATE_MAX || '20', 10); // 20 req/min/IP default
+const RATE_MESSAGE = process.env.RATE_MESSAGE || 'Too many requests, please try again later.';
 
 // Middleware
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
+
+// Rate limiter (API only)
+const apiLimiter = rateLimit({
+  windowMs: RATE_WINDOW_MS,
+  max: RATE_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too Many Requests', detail: RATE_MESSAGE }
+});
+app.use('/api/', apiLimiter);
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -148,7 +164,15 @@ async function callUpstreamOCR(dataURL: string): Promise<{ latex: string; raw: s
       throw new Error(`Upstream returned ${response.status}: ${errorText.substring(0, 100)}`);
     }
 
-    const data = await response.json();
+    interface ChatCompletionResponse {
+      choices?: Array<{
+        message?: {
+          content?: string;
+        };
+      }>;
+    }
+
+    const data = (await response.json()) as ChatCompletionResponse;
     console.log(`[OCR] Success in ${duration}ms`);
 
     // Extract content from response
@@ -230,6 +254,28 @@ app.post('/api/ocr', upload.single('image'), async (req: Request, res: Response)
   }
 });
 
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+if (SERVE_STATIC) {
+  app.use(express.static(STATIC_DIR));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/')) {
+      return next();
+    }
+
+    const indexPath = path.join(STATIC_DIR, 'index.html');
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        next(err);
+      }
+    });
+  });
+}
+
 // Handle multer errors
 app.use((error: any, req: Request, res: Response, next: any) => {
   if (error instanceof multer.MulterError) {
@@ -242,16 +288,11 @@ app.use((error: any, req: Request, res: Response, next: any) => {
     return res.status(400).json({ error: error.message });
   }
   
-  if (error.message.includes('Unsupported file type')) {
+  if (error.message && error.message.includes('Unsupported file type')) {
     return res.status(400).json({ error: error.message });
   }
   
   next(error);
-});
-
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Start server

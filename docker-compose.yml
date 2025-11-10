@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  paddleocr-vllm:
+    image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:latest
+    command: >
+      paddleocr genai_server --model_name PaddleOCR-VL-0.9B --host 0.0.0.0 --port 8118 --backend vllm --backend_config /work/vllm_config.yaml
+    ports:
+      - "8118:8118"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    volumes:
+      - ./:/work:ro
+    networks:
+      - ocr-stack
+
+  ocr-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      OCR_BASE: http://paddleocr-vllm:8118/v1
+      OCR_MODEL: PaddleOCR-VL-0.9B
+      SERVE_STATIC: "true"
+      RATE_WINDOW_MS: 60000
+      RATE_MAX: 20
+      RATE_MESSAGE: "Request rate is too high. Please retry later."
+    ports:
+      - "3001:3001"
+    depends_on:
+      - paddleocr-vllm
+    restart: unless-stopped
+    networks:
+      - ocr-stack
+
+networks:
+  ocr-stack:
+    driver: bridge
+

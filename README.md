@@ -150,7 +150,77 @@ npm run build:server # 构建后端
 
 ## 生产部署
 
-### 方式 1: Docker（推荐）
+### 方式 1: Docker Compose（推荐）
+
+项目根目录提供了 `docker-compose.yml`，可以一次性启动 PaddleOCR-VL 服务和前后端应用。请确保主机已安装 [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) 并能正常执行 `nvidia-smi`。
+
+```bash
+# 启动（首次会自动构建前后端镜像）
+docker compose up -d
+
+# 查看运行状态
+docker compose ps
+
+# 停止并清理
+docker compose down
+```
+
+默认会将前端/后端服务暴露在 `http://localhost:3001`，PaddleOCR-VL 服务暴露在 `http://localhost:8118`。如需修改端口或模型名称，可在 `docker-compose.yml` 中调整对应环境变量。
+
+#### 关于 vLLM 配置（backend_config）
+
+我们在 `docker-compose.yml` 中为 `paddleocr-vllm` 服务挂载了项目根目录为容器内 `/work`（只读），并默认指定：
+
+```
+--backend_config /work/vllm_config.yaml
+```
+
+你可以直接编辑项目根目录的 `vllm_config.yaml` 来调整 vLLM 行为（如 `tensor_parallel_size`、`gpu_memory_utilization` 等）。如果你想使用自定义路径，可以：
+- 替换 `docker-compose.yml` 里的 `--backend_config` 路径；或
+- 修改挂载的 volume 指向你的配置目录。
+
+示例（使用自定义配置文件）：
+
+```yaml
+services:
+  paddleocr-vllm:
+    volumes:
+      - /path/to/your/config.yaml:/work/vllm_config.yaml:ro
+    command: >
+      paddleocr genai_server --model_name PaddleOCR-VL-0.9B --host 0.0.0.0 --port 8118 --backend vllm --backend_config /work/vllm_config.yaml
+```
+
+#### 局域网访问
+
+- 将 `http://localhost:3001` 替换为宿主机的局域网 IP，例如：`http://192.168.1.10:3001`
+- 确保宿主机防火墙放行 `3001/tcp`（以及 `8118/tcp`，如果你需要从其他机器直接访问 PaddleOCR-VL）
+- 在当前架构下，Express 默认绑定 0.0.0.0，无需额外配置
+
+#### 限流与防爆
+
+后端对 `/api/*` 路由开启了基于 IP 的限流，默认配置：
+
+- 窗口：`RATE_WINDOW_MS=60000`（60 秒）
+- 最大请求数：`RATE_MAX=20`（每 IP 每窗口）
+- 提示文案：`RATE_MESSAGE="Request rate is too high. Please retry later."`
+
+可在 `docker-compose.yml` 的 `ocr-web.environment` 中覆盖以上变量。例如：
+
+```yaml
+environment:
+  RATE_WINDOW_MS: 60000
+  RATE_MAX: 10
+  RATE_MESSAGE: "请求过于频繁，请稍后再试。"
+```
+
+如需关闭静态资源托管（仅提供后端 API），可设置：
+
+```yaml
+environment:
+  SERVE_STATIC: "false"
+```
+
+### 方式 2: 单体 Docker 镜像
 
 ```bash
 # 构建镜像
@@ -165,7 +235,7 @@ docker run -d \
   ocr-web
 ```
 
-### 方式 2: Nginx + systemd
+### 方式 3: Nginx + systemd
 
 ```bash
 # 1. 构建前后端

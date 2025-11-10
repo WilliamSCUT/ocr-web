@@ -1,0 +1,7 @@
+enable_prefix_caching: false
+gpu_memory_utilization: 0.88
+max_num_batched_tokens: 4096
+max_seq_len: 5000
+kv_cache_dtype: auto
+enforce_eager: true
+mm_processor_cache_gb: 0

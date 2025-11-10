@@ -15,7 +15,6 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [result, setResult] = useState<OCRResponse | null>(null);
-  const [showRaw, setShowRaw] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,7 +131,6 @@ function App() {
     setImagePreview('');
     setResult(null);
     setError('');
-    setShowRaw(false);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
