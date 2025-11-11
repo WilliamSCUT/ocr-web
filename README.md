@@ -334,6 +334,61 @@ docker run -e OCR_BASE=http://host.docker.internal:8118/v1 ...
 - 根目录运行过 `npm install`（安装 concurrently）
 - server 和 web 目录都运行过 `npm install`
 
+### Q: Docker Compose 启动后，ocr-web 容器不断重启（Restarting）
+
+**A:** 这通常是因为代码错误导致容器启动失败。按以下步骤排查：
+
+1. **查看容器日志**（最重要）：
+   ```bash
+   docker compose logs -f ocr-web
+   ```
+   日志会显示具体的错误信息，常见错误包括：
+   - `ReferenceError: __dirname is not defined`（ES 模块兼容性问题，已在最新版本修复）
+   - 文件找不到
+   - 模块导入错误
+
+2. **如果看到 `__dirname is not defined` 错误**：
+   这是 ES 模块兼容性问题，已在代码中修复。请确保使用最新代码：
+   ```bash
+   git pull  # 如果是从 git 克隆的
+   docker compose build --no-cache ocr-web
+   docker compose up -d
+   ```
+
+3. **检查构建是否成功**：
+   ```bash
+   docker compose build ocr-web
+   ```
+
+4. **手动测试启动**：
+   ```bash
+   docker compose run --rm ocr-web node dist/index.js
+   ```
+
+5. **完整重建**（如果以上都不行）：
+   ```bash
+   docker compose down
+   docker compose build --no-cache
+   docker compose up -d
+   docker compose logs -f ocr-web
+   ```
+
+详细排查步骤请参考 `TROUBLESHOOTING.md`。
+
+### Q: docker compose up -d 启动时没有任何输出，正常吗？
+
+**A:** 这是**正常的**！`-d` 参数表示后台（detached）模式，所有输出都会进入日志。要查看实时输出，使用：
+
+```bash
+docker compose logs -f
+```
+
+或者启动时不加 `-d`：
+
+```bash
+docker compose up
+```
+
 ## 技术栈
 
 - **前端**: React 18 + TypeScript + Vite + MathJax 3

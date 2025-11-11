@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   paddleocr-vllm:
     image: ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddleocr-genai-vllm-server:latest

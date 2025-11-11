@@ -3,10 +3,15 @@ import multer from 'multer';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { unlink } from 'fs/promises';
-import path from 'path';
+import path, { dirname } from 'path';
+import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 
 dotenv.config();
+
+// ES module compatible __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
