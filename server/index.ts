@@ -6,6 +6,7 @@ import { unlink } from 'fs/promises';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
+import { convertLatexToMathML, isDisplayLatex } from './mathml.js';
 
 dotenv.config();
 
@@ -134,10 +135,16 @@ export function buildPayload(dataURL: string, model: string, preferredFormat: bo
   };
 }
 
+interface OCRResultPayload {
+  latex: string;
+  mathml: string;
+  raw: string;
+}
+
 /**
  * Call upstream OCR service
  */
-async function callUpstreamOCR(dataURL: string): Promise<{ latex: string; raw: string }> {
+async function callUpstreamOCR(dataURL: string): Promise<OCRResultPayload> {
   const payload = buildPayload(dataURL, OCR_MODEL, false);
   
   const headers: Record<string, string> = {
@@ -183,8 +190,9 @@ async function callUpstreamOCR(dataURL: string): Promise<{ latex: string; raw: s
     // Extract content from response
     const rawContent = data.choices?.[0]?.message?.content || '';
     const latex = extractLatex(rawContent);
+    const mathml = latex ? convertLatexToMathML(latex, isDisplayLatex(latex)) : '';
 
-    return { latex, raw: rawContent };
+    return { latex, mathml, raw: rawContent };
   } catch (error: any) {
     clearTimeout(timeoutId);
     
@@ -217,10 +225,11 @@ app.post('/api/ocr', upload.single('image'), async (req: Request, res: Response)
       // Call upstream service
       const result = await callUpstreamOCR(dataURL);
       
-      console.log(`[${requestId}] Success - LaTeX length: ${result.latex.length}`);
+      console.log(`[${requestId}] Success - LaTeX length: ${result.latex.length}, MathML length: ${result.mathml.length}`);
       
       res.json({
         latex: result.latex,
+        mathml: result.mathml,
         raw: result.raw,
         request_id: requestId
       });

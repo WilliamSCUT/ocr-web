@@ -1,5 +1,6 @@
 export interface OCRResponse {
   latex: string;
+  mathml?: string;
   raw: string;
   request_id?: string;
 }

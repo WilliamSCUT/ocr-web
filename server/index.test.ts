@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractLatex, buildPayload } from './index.js';
+import { convertLatexToMathML, isDisplayLatex } from './mathml.js';
 
 describe('extractLatex', () => {
   it('should extract content from $$...$$', () => {
@@ -87,6 +88,24 @@ describe('buildPayload', () => {
     const userContent = payload.messages[0].content as any[];
     
     expect(userContent[1].text).toBe('Formula Recognition:');
+  });
+});
+
+describe('MathML Conversion', () => {
+  it('should detect display mode when aligned environment used', () => {
+    const latex = '\\begin{aligned}a &= b \\\\ c &= d\\end{aligned}';
+    expect(isDisplayLatex(latex)).toBe(true);
+  });
+
+  it('should convert LaTeX to MathML markup', () => {
+    const latex = '\\frac{a}{b} + c';
+    const mathml = convertLatexToMathML(latex, false);
+    expect(mathml).toContain('<math');
+    expect(mathml).toContain('<mfrac>');
+  });
+
+  it('should return empty string for invalid input', () => {
+    expect(convertLatexToMathML('', true)).toBe('');
   });
 });
 

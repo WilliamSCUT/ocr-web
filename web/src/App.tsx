@@ -15,10 +15,12 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
   const [result, setResult] = useState<OCRResponse | null>(null);
+  const [mathmlFallback, setMathmlFallback] = useState<string>('');
   const [isDragging, setIsDragging] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renderRef = useRef<HTMLDivElement>(null);
+  const resolvedMathML = result?.mathml || mathmlFallback;
 
   // Handle paste event
   useEffect(() => {
@@ -42,6 +44,39 @@ function App() {
         console.error('MathJax rendering error:', err);
       });
     }
+  }, [result]);
+
+  // Convert LaTeX to MathML on the client as a fallback when server did not respond with MathML
+  useEffect(() => {
+    setMathmlFallback('');
+
+    if (!result?.latex || result.mathml) {
+      return;
+    }
+
+    let cancelled = false;
+    const convert = async () => {
+      const mathJax = window.MathJax;
+      if (!mathJax?.tex2mmlPromise) {
+        return;
+      }
+
+      try {
+        const isDisplay = result.latex.includes('\\begin') || result.latex.includes('\\\\') || result.latex.includes('\n');
+        const mathml = await mathJax.tex2mmlPromise(result.latex, { display: isDisplay });
+        if (!cancelled) {
+          setMathmlFallback(mathml);
+        }
+      } catch (conversionError) {
+        console.error('MathML conversion error:', conversionError);
+      }
+    };
+
+    convert();
+
+    return () => {
+      cancelled = true;
+    };
   }, [result]);
 
   const handleFileSelect = async (file: File) => {
@@ -120,6 +155,13 @@ function App() {
     }
   };
 
+  const handleCopyMathML = () => {
+    if (resolvedMathML) {
+      navigator.clipboard.writeText(resolvedMathML);
+      alert('MathML copied to clipboard!');
+    }
+  };
+
   const handleRetry = () => {
     if (imageFile) {
       recognizeImage(imageFile);
@@ -130,6 +172,7 @@ function App() {
     setImageFile(null);
     setImagePreview('');
     setResult(null);
+    setMathmlFallback('');
     setError('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -224,6 +267,25 @@ function App() {
               readOnly
               rows={4}
             />
+          </div>
+          
+          <div className="result-section">
+            <div className="section-header">
+              <h2>MathML 代码</h2>
+              {resolvedMathML && (
+                <button onClick={handleCopyMathML} className="btn-copy">
+                  复制
+                </button>
+              )}
+            </div>
+            <textarea
+              className="latex-output"
+              value={resolvedMathML || ''}
+              placeholder="MathML 代码将显示在这里..."
+              readOnly
+              rows={4}
+            />
+            <p className="hint">可直接复制粘贴到 Word、WPS 等文档编辑器。</p>
           </div>
 
           <div className="result-section">
