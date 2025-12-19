@@ -19,7 +19,7 @@ const tex = new TeX({
 });
 
 // OutputJax is still required by MathDocument, though we only read the compiled Mml tree.
-const chtml = new CHTML({ fontCache: 'none' });
+const chtml = new CHTML();
 const html = mathjax.document('', {
   InputJax: tex,
   OutputJax: chtml
