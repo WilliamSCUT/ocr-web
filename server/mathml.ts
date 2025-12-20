@@ -37,7 +37,8 @@ export function isDisplayLatex(latex: string): boolean {
 
 export function normalizeLatex(latex: string): string {
   if (!latex) return '';
-  const withLeftScripts = rewriteLeftScripts(latex);
+  const cleaned = cleanEnvironments(latex);
+  const withLeftScripts = rewriteLeftScripts(cleaned);
   return normalizeDerivatives(withLeftScripts);
 }
 
@@ -101,18 +102,22 @@ interface DerivativeCommand {
 }
 
 function matchLeftScripts(source: string, start: number): ScriptMatch | null {
-  if (source[start] !== '{' || source[start + 1] !== '}') {
+  const length = source.length;
+  let cursor = start;
+  const scripts: ScriptResult[] = [];
+
+  if (source[start] === '{' && source[start + 1] === '}') {
+    cursor = start + 2;
+    while (cursor < length && /\s/.test(source[cursor])) {
+      cursor += 1;
+    }
+  } else if (source[start] === '^' || source[start] === '_') {
+    if (start > 0 && !/[\s([{=+\-*/]/.test(source[start - 1])) {
+      return null;
+    }
+  } else {
     return null;
   }
-
-  let cursor = start + 2;
-  const length = source.length;
-
-  while (cursor < length && /\s/.test(source[cursor])) {
-    cursor += 1;
-  }
-
-  const scripts: ScriptResult[] = [];
 
   for (let i = 0; i < 2; i += 1) {
     const script = readScript(source, cursor);
@@ -340,18 +345,60 @@ function readDerivativeTarget(source: string, start: number): BaseTokenResult | 
 }
 
 function postProcessMathML(mathml: string): string {
-  const singleDotPattern = /<mover>([\s\S]*?)<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<\/mover>/g;
-  const doubleDotPattern = /<mover>([\s\S]*?)<mrow>\s*<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<mspace[^>]*\/?>\s*<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<\/mrow>\s*<\/mover>/g;
+  const namespaceEnforced = ensureMathNamespace(mathml);
+  const accentHandled = enforceMoverAccents(namespaceEnforced);
+  const placeholderReplaced = replaceNonePlaceholders(accentHandled);
+  const emptyRemoved = removeEmptyNodes(placeholderReplaced);
+  return stripUnsupportedAttributes(emptyRemoved);
+}
 
-  let output = mathml.replace(doubleDotPattern, (_, base) => {
-    return `<mover accent="true">${base}<mo>¨</mo></mover>`;
+function cleanEnvironments(latex: string): string {
+  let result = latex.replace(/\\limits\b/g, '');
+
+  result = result.replace(/\\bm\s*{([^}]*)}/g, (_match, content) => `\\mathbf{${content}}`);
+  result = result.replace(/\\bm\s+([A-Za-z])/g, (_match, symbol) => `\\mathbf{${symbol}}`);
+
+  result = result.replace(/\\text\s*{([^}]*)}/g, (_match, content) => {
+    const normalized = content.replace(/\s+/g, ' ').trim();
+    return normalized ? `\\text{${normalized}}` : '\\text{}';
   });
 
-  output = output.replace(singleDotPattern, (_, base) => {
-    return `<mover accent="true">${base}<mo>˙</mo></mover>`;
-  });
+  return result;
+}
 
-  return output;
+function ensureMathNamespace(mathml: string): string {
+  return mathml.replace(/<math(?![^>]*xmlns=)/, '<math xmlns="http://www.w3.org/1998/Math/MathML"');
+}
+
+function enforceMoverAccents(mathml: string): string {
+  const dotPattern = /<mo[^>]*>(?:˙|¨|&#x02D9;|&#x00A8;|&Dot;|&DoubleDot;)</mo>/;
+  return mathml.replace(/<mover([^>]*)>([\s\S]*?)<\/mover>/g, (match, attrs, content) => {
+    if (!dotPattern.test(content)) {
+      return match;
+    }
+
+    if (/\saccent\s*=/.test(attrs)) {
+      return match;
+    }
+
+    const newAttrs = `${attrs} accent="true"`;
+    return `<mover${newAttrs}>${content}</mover>`;
+  });
+}
+
+function replaceNonePlaceholders(mathml: string): string {
+  return mathml.replace(/<none\s*\/>/g, '<mtext>&#x200B;</mtext>');
+}
+
+function removeEmptyNodes(mathml: string): string {
+  let result = mathml.replace(/<mrow\b[^>]*>\s*<\/mrow>/g, '');
+  result = result.replace(/<mtd\b[^>]*>\s*<\/mtd>/g, '');
+  result = result.replace(/<mtext\b[^>]*>\s*<\/mtext>/g, '<mtext>&#x200B;</mtext>');
+  return result;
+}
+
+function stripUnsupportedAttributes(mathml: string): string {
+  return mathml.replace(/\s+(?:display|indentalign|indentshift|indentalignfirst|indentalignlast|indenttarget)="[^"]*"/g, '');
 }
 
 function rewriteLeftScripts(latex: string): string {
@@ -367,7 +414,7 @@ function rewriteLeftScripts(latex: string): string {
       if (base && !shouldSkipBase(base.token)) {
         const subValue = match.sub || '\\mathstrut';
         const supValue = match.sup || '\\mathstrut';
-        result += `${base.whitespace}\\prescript${wrapWithBraces(supValue)}${wrapWithBraces(subValue)}${wrapWithBraces(base.token)}`;
+        result += `${base.whitespace}\\hspace{0pt}\\prescript${wrapWithBraces(supValue)}${wrapWithBraces(subValue)}${wrapWithBraces(base.token)}`;
         index = base.end;
         continue;
       }
@@ -396,8 +443,8 @@ function normalizeDerivatives(latex: string): string {
       const target = readDerivativeTarget(latex, derivative.nextIndex);
 
       if (target) {
-        const accent = derivative.order === 1 ? '\\Large\\cdot' : '\\Large\\cdot\\mkern-4mu\\Large\\cdot';
-        result += `\\overset{${accent}}${wrapWithBraces(target.token)}`;
+        const accentChar = derivative.order === 1 ? '˙' : '¨';
+        result += `\\overset{${accentChar}}${wrapWithBraces(target.token)}`;
         index = target.end;
         continue;
       }

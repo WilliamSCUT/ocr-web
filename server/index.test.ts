@@ -112,17 +112,17 @@ describe('MathML Conversion', () => {
 describe('normalizeLatex', () => {
   it('should convert empty-base subsuperscripts to prescript form', () => {
     const input = '{}_{3}^{0}R';
-    expect(normalizeLatex(input)).toBe('\\prescript{0}{3}{R}');
+    expect(normalizeLatex(input)).toBe('\\hspace{0pt}\\prescript{0}{3}{R}');
   });
 
   it('should handle bases that already have standard subscripts', () => {
     const input = '{}^{0}\\upsilon_{3}';
-    expect(normalizeLatex(input)).toBe('\\prescript{0}{\\mathstrut}{\\upsilon_{3}}');
+    expect(normalizeLatex(input)).toBe('\\hspace{0pt}\\prescript{0}{\\mathstrut}{\\upsilon_{3}}');
   });
 
   it('should support superscript declared before subscript', () => {
     const input = '{}^{0}_{3}\\mathbf{R}';
-    expect(normalizeLatex(input)).toBe('\\prescript{0}{3}{\\mathbf{R}}');
+    expect(normalizeLatex(input)).toBe('\\hspace{0pt}\\prescript{0}{3}{\\mathbf{R}}');
   });
 
   it('should leave expressions without the pattern untouched', () => {
@@ -133,8 +133,15 @@ describe('normalizeLatex', () => {
   it('should expand derivative operators to overset form', () => {
     const input = '\\dot{\\theta} + \\ddot{q}';
     const output = normalizeLatex(input);
-    expect(output).toContain('\\overset{\\Large\\cdot}{\\theta}');
-    expect(output).toContain('\\overset{\\Large\\cdot\\mkern-4mu\\Large\\cdot}{q}');
+    expect(output).toContain('\\overset{˙}{\\theta}');
+    expect(output).toContain('\\overset{¨}{q}');
+  });
+
+  it('should clean environments and bold commands', () => {
+    const input = '\\text{  Hello   World  } + \\bm{x} + \\limits_{a}';
+    const output = normalizeLatex(input);
+    expect(output).toContain('\\text{Hello World}');
+    expect(output).toContain('\\mathbf{x}');
+    expect(output).not.toContain('\\limits');
   });
 });
-
