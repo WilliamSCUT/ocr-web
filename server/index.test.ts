@@ -133,8 +133,8 @@ describe('normalizeLatex', () => {
   it('should expand derivative operators to overset form', () => {
     const input = '\\dot{\\theta} + \\ddot{q}';
     const output = normalizeLatex(input);
-    expect(output).toContain('\\overset{˙}{\\theta}');
-    expect(output).toContain('\\overset{¨}{q}');
+    expect(output).toContain(`\\overset{\u02D9}{\\theta}`);
+    expect(output).toContain(`\\overset{\u00A8}{q}`);
   });
 
   it('should clean environments and bold commands', () => {

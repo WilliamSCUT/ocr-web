@@ -371,7 +371,7 @@ function ensureMathNamespace(mathml: string): string {
 }
 
 function enforceMoverAccents(mathml: string): string {
-  const dotPattern = /<mo[^>]*>(?:˙|¨|&#x02D9;|&#x00A8;|&Dot;|&DoubleDot;)</mo>/;
+  const dotPattern = /<mo[^>]*>(?:\u02D9|\u00A8|&#x02D9;|&#x00A8;|&Dot;|&DoubleDot;)</mo>/;
   return mathml.replace(/<mover([^>]*)>([\s\S]*?)<\/mover>/g, (match, attrs, content) => {
     if (!dotPattern.test(content)) {
       return match;
@@ -443,7 +443,7 @@ function normalizeDerivatives(latex: string): string {
       const target = readDerivativeTarget(latex, derivative.nextIndex);
 
       if (target) {
-        const accentChar = derivative.order === 1 ? '˙' : '¨';
+        const accentChar = derivative.order === 1 ? '\u02D9' : '\u00A8';
         result += `\\overset{${accentChar}}${wrapWithBraces(target.token)}`;
         index = target.end;
         continue;
