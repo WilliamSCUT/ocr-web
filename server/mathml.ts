@@ -371,19 +371,20 @@ function ensureMathNamespace(mathml: string): string {
 }
 
 function enforceMoverAccents(mathml: string): string {
-  const dotPattern = /<mo[^>]*>(?:&#x22C5;|⋅)<\/mo>/;
-  return mathml.replace(/<mover([^>]*)>([\s\S]*?)<\/mover>/g, (match, attrs, content) => {
-    if (!dotPattern.test(content)) {
-      return match;
-    }
+  const doubleDotPattern = /<mover([^>]*)>([\s\S]*?)<mrow>\s*<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<mspace[^>]*\/?>\s*<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<\/mrow>\s*<\/mover>/g;
+  const singleDotPattern = /<mover([^>]*)>([\s\S]*?)<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<\/mover>/g;
 
-    if (/\saccent\s*=/.test(attrs)) {
-      return match;
-    }
-
-    const newAttrs = `${attrs} accent="true"`;
-    return `<mover${newAttrs}>${content}</mover>`;
+  let output = mathml.replace(doubleDotPattern, (_, attrs, base) => {
+    const newAttrs = /\saccent\s*=/.test(attrs) ? attrs : `${attrs} accent="true"`;
+    return `<mover${newAttrs}>${base}<mo>¨</mo></mover>`;
   });
+
+  output = output.replace(singleDotPattern, (_, attrs, base) => {
+    const newAttrs = /\saccent\s*=/.test(attrs) ? attrs : `${attrs} accent="true"`;
+    return `<mover${newAttrs}>${base}<mo>˙</mo></mover>`;
+  });
+
+  return output;
 }
 
 function replaceNonePlaceholders(mathml: string): string {
