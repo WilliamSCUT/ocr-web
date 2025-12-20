@@ -64,7 +64,8 @@ export function convertLatexToMathML(latex: string, displayOverride?: boolean): 
       return '';
     }
 
-    return visitor.visitTree(mathItem.root);
+    const rawMathML = visitor.visitTree(mathItem.root);
+    return postProcessMathML(rawMathML);
   } catch (error) {
     console.error('[MathML] Conversion failed:', error);
     return '';
@@ -338,6 +339,21 @@ function readDerivativeTarget(source: string, start: number): BaseTokenResult | 
   return { token: source.slice(cursor, scripts.end), end: scripts.end, whitespace: '' };
 }
 
+function postProcessMathML(mathml: string): string {
+  const singleDotPattern = /<mover>([\s\S]*?)<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<\/mover>/g;
+  const doubleDotPattern = /<mover>([\s\S]*?)<mrow>\s*<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<mspace[^>]*\/?>\s*<mstyle[^>]*>\s*<mo>(?:&#x22C5;|⋅)<\/mo>\s*<\/mstyle>\s*<\/mrow>\s*<\/mover>/g;
+
+  let output = mathml.replace(doubleDotPattern, (_, base) => {
+    return `<mover accent="true">${base}<mo>¨</mo></mover>`;
+  });
+
+  output = output.replace(singleDotPattern, (_, base) => {
+    return `<mover accent="true">${base}<mo>˙</mo></mover>`;
+  });
+
+  return output;
+}
+
 function rewriteLeftScripts(latex: string): string {
   let result = '';
   let index = 0;
@@ -349,7 +365,9 @@ function rewriteLeftScripts(latex: string): string {
       const base = readBaseToken(latex, match.nextIndex);
 
       if (base && !shouldSkipBase(base.token)) {
-        result += `${base.whitespace}\\prescript${wrapWithBraces(match.sup)}${wrapWithBraces(match.sub)}${wrapWithBraces(base.token)}`;
+        const subValue = match.sub || '\\mathstrut';
+        const supValue = match.sup || '\\mathstrut';
+        result += `${base.whitespace}\\prescript${wrapWithBraces(supValue)}${wrapWithBraces(subValue)}${wrapWithBraces(base.token)}`;
         index = base.end;
         continue;
       }

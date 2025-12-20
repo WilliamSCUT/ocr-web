@@ -117,7 +117,7 @@ describe('normalizeLatex', () => {
 
   it('should handle bases that already have standard subscripts', () => {
     const input = '{}^{0}\\upsilon_{3}';
-    expect(normalizeLatex(input)).toBe('\\prescript{0}{}{\\upsilon_{3}}');
+    expect(normalizeLatex(input)).toBe('\\prescript{0}{\\mathstrut}{\\upsilon_{3}}');
   });
 
   it('should support superscript declared before subscript', () => {
