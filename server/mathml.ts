@@ -37,33 +37,8 @@ export function isDisplayLatex(latex: string): boolean {
 
 export function normalizeLatex(latex: string): string {
   if (!latex) return '';
-
-  let result = '';
-  let index = 0;
-
-  while (index < latex.length) {
-    const match = matchLeftScripts(latex, index);
-
-    if (match) {
-      const base = readBaseToken(latex, match.nextIndex);
-
-      if (base && !shouldSkipBase(base.token)) {
-        result += `${base.whitespace}\\prescript${wrapWithBraces(match.sup)}${wrapWithBraces(match.sub)}${wrapWithBraces(base.token)}`;
-        index = base.end;
-        continue;
-      }
-
-      const fallbackEnd = base ? base.end : match.nextIndex;
-      result += latex.slice(index, fallbackEnd);
-      index = fallbackEnd;
-      continue;
-    }
-
-    result += latex[index];
-    index += 1;
-  }
-
-  return result;
+  const withLeftScripts = rewriteLeftScripts(latex);
+  return normalizeDerivatives(withLeftScripts);
 }
 
 /**
@@ -119,6 +94,11 @@ interface BaseTokenResult {
   whitespace: string;
 }
 
+interface DerivativeCommand {
+  order: number;
+  nextIndex: number;
+}
+
 function matchLeftScripts(source: string, start: number): ScriptMatch | null {
   if (source[start] !== '{' || source[start + 1] !== '}') {
     return null;
@@ -131,26 +111,32 @@ function matchLeftScripts(source: string, start: number): ScriptMatch | null {
     cursor += 1;
   }
 
-  const first = readScript(source, cursor);
-  if (!first) return null;
+  const scripts: ScriptResult[] = [];
 
-  cursor = first.end;
-  while (cursor < length && /\s/.test(source[cursor])) {
-    cursor += 1;
+  for (let i = 0; i < 2; i += 1) {
+    const script = readScript(source, cursor);
+    if (!script) break;
+    scripts.push(script);
+    cursor = script.end;
+
+    while (cursor < length && /\s/.test(source[cursor])) {
+      cursor += 1;
+    }
   }
 
-  const second = readScript(source, cursor);
-  if (!second) return null;
+  if (scripts.length === 0) return null;
 
-  const types = `${first.type}${second.type}`;
-  if (!(types.includes('_') && types.includes('^'))) {
-    return null;
+  let sub = '';
+  let sup = '';
+  for (const script of scripts) {
+    if (script.type === '_') {
+      sub = script.value;
+    } else if (script.type === '^') {
+      sup = script.value;
+    }
   }
 
-  const sub = first.type === '_' ? first.value : second.value;
-  const sup = first.type === '^' ? first.value : second.value;
-
-  return { sub, sup, nextIndex: second.end };
+  return { sub, sup, nextIndex: cursor };
 }
 
 function readScript(source: string, start: number): ScriptResult | null {
@@ -241,16 +227,19 @@ function readBaseToken(source: string, start: number): BaseTokenResult | null {
       }
     }
 
-    return { token, end, whitespace };
+    const scripts = collectAttachedScripts(source, end);
+    return { token: `${token}${scripts.text}`, end: scripts.end, whitespace };
   }
 
   if (source[cursor] === '{') {
     const group = readGroup(source, cursor);
     if (!group) return null;
-    return { token: source.slice(cursor, group.end), end: group.end, whitespace };
+    const scripts = collectAttachedScripts(source, group.end);
+    return { token: `${source.slice(cursor, group.end)}${scripts.text}`, end: scripts.end, whitespace };
   }
 
-  return { token: source[cursor], end: cursor + 1, whitespace };
+  const scripts = collectAttachedScripts(source, cursor + 1);
+  return { token: source[cursor], end: scripts.end, whitespace };
 }
 
 function wrapWithBraces(value: string): string {
@@ -271,4 +260,134 @@ function shouldSkipBase(token: string): boolean {
   if (!trimmed) return true;
   const disallowed = ['\\left', '\\right', '\\big', '\\Big', '\\bigg', '\\Bigg'];
   return disallowed.some(prefix => trimmed.startsWith(prefix));
+}
+
+function collectAttachedScripts(source: string, start: number): { text: string; end: number } {
+  let cursor = start;
+  let text = '';
+
+  while (cursor < source.length) {
+    let lookahead = cursor;
+    while (lookahead < source.length && /\s/.test(source[lookahead])) {
+      lookahead += 1;
+    }
+
+    const script = readScript(source, lookahead);
+    if (!script) {
+      break;
+    }
+
+    text += source.slice(cursor, lookahead);
+    text += `${script.type}${wrapWithBraces(script.value)}`;
+    cursor = script.end;
+  }
+
+  return { text, end: cursor };
+}
+
+function detectDerivativeCommand(source: string, start: number): DerivativeCommand | null {
+  const ddot = '\\ddot';
+  const dot = '\\dot';
+
+  if (source.startsWith(ddot, start) && !/[a-zA-Z]/.test(source[start + ddot.length] || '')) {
+    return { order: 2, nextIndex: start + ddot.length };
+  }
+
+  if (source.startsWith(dot, start) && !/[a-zA-Z]/.test(source[start + dot.length] || '')) {
+    return { order: 1, nextIndex: start + dot.length };
+  }
+
+  return null;
+}
+
+function readDerivativeTarget(source: string, start: number): BaseTokenResult | null {
+  let cursor = start;
+
+  while (cursor < source.length && /\s/.test(source[cursor])) {
+    cursor += 1;
+  }
+
+  if (cursor >= source.length) {
+    return null;
+  }
+
+  if (source[cursor] === '{') {
+    const group = readGroup(source, cursor);
+    if (!group) return null;
+    return { token: source.slice(cursor, group.end), end: group.end, whitespace: '' };
+  }
+
+  if (source[cursor] === '\\') {
+    const match = source.slice(cursor).match(/^\\[a-zA-Z]+/);
+    if (!match) return null;
+
+    let end = cursor + match[0].length;
+
+    if (source[end] === '{') {
+      const group = readGroup(source, end);
+      if (group) {
+        end = group.end;
+      }
+    }
+
+    const scripts = collectAttachedScripts(source, end);
+    return { token: source.slice(cursor, scripts.end), end: scripts.end, whitespace: '' };
+  }
+
+  const scripts = collectAttachedScripts(source, cursor + 1);
+  return { token: source.slice(cursor, scripts.end), end: scripts.end, whitespace: '' };
+}
+
+function rewriteLeftScripts(latex: string): string {
+  let result = '';
+  let index = 0;
+
+  while (index < latex.length) {
+    const match = matchLeftScripts(latex, index);
+
+    if (match) {
+      const base = readBaseToken(latex, match.nextIndex);
+
+      if (base && !shouldSkipBase(base.token)) {
+        result += `${base.whitespace}\\prescript${wrapWithBraces(match.sup)}${wrapWithBraces(match.sub)}${wrapWithBraces(base.token)}`;
+        index = base.end;
+        continue;
+      }
+
+      const fallbackEnd = base ? base.end : match.nextIndex;
+      result += latex.slice(index, fallbackEnd);
+      index = fallbackEnd;
+      continue;
+    }
+
+    result += latex[index];
+    index += 1;
+  }
+
+  return result;
+}
+
+function normalizeDerivatives(latex: string): string {
+  let result = '';
+  let index = 0;
+
+  while (index < latex.length) {
+    const derivative = detectDerivativeCommand(latex, index);
+
+    if (derivative) {
+      const target = readDerivativeTarget(latex, derivative.nextIndex);
+
+      if (target) {
+        const accent = derivative.order === 1 ? '\\Large\\cdot' : '\\Large\\cdot\\mkern-4mu\\Large\\cdot';
+        result += `\\overset{${accent}}${wrapWithBraces(target.token)}`;
+        index = target.end;
+        continue;
+      }
+    }
+
+    result += latex[index];
+    index += 1;
+  }
+
+  return result;
 }

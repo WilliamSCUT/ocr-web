@@ -115,6 +115,11 @@ describe('normalizeLatex', () => {
     expect(normalizeLatex(input)).toBe('\\prescript{0}{3}{R}');
   });
 
+  it('should handle bases that already have standard subscripts', () => {
+    const input = '{}^{0}\\upsilon_{3}';
+    expect(normalizeLatex(input)).toBe('\\prescript{0}{}{\\upsilon_{3}}');
+  });
+
   it('should support superscript declared before subscript', () => {
     const input = '{}^{0}_{3}\\mathbf{R}';
     expect(normalizeLatex(input)).toBe('\\prescript{0}{3}{\\mathbf{R}}');
@@ -123,6 +128,13 @@ describe('normalizeLatex', () => {
   it('should leave expressions without the pattern untouched', () => {
     const input = 'R_{3}^{0}';
     expect(normalizeLatex(input)).toBe('R_{3}^{0}');
+  });
+
+  it('should expand derivative operators to overset form', () => {
+    const input = '\\dot{\\theta} + \\ddot{q}';
+    const output = normalizeLatex(input);
+    expect(output).toContain('\\overset{\\Large\\cdot}{\\theta}');
+    expect(output).toContain('\\overset{\\Large\\cdot\\mkern-4mu\\Large\\cdot}{q}');
   });
 });
 
