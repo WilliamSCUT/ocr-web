@@ -6,7 +6,7 @@ import { unlink } from 'fs/promises';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
-import { convertLatexToMathML, isDisplayLatex } from './mathml.js';
+import { convertLatexToMathML, isDisplayLatex, normalizeLatex } from './mathml.js';
 
 dotenv.config();
 
@@ -190,9 +190,10 @@ async function callUpstreamOCR(dataURL: string): Promise<OCRResultPayload> {
     // Extract content from response
     const rawContent = data.choices?.[0]?.message?.content || '';
     const latex = extractLatex(rawContent);
-    const mathml = latex ? convertLatexToMathML(latex, isDisplayLatex(latex)) : '';
+    const normalizedLatex = normalizeLatex(latex);
+    const mathml = normalizedLatex ? convertLatexToMathML(normalizedLatex, isDisplayLatex(normalizedLatex)) : '';
 
-    return { latex, mathml, raw: rawContent };
+    return { latex: normalizedLatex, mathml, raw: rawContent };
   } catch (error: any) {
     clearTimeout(timeoutId);
     

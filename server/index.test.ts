@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { extractLatex, buildPayload } from './index.js';
-import { convertLatexToMathML, isDisplayLatex } from './mathml.js';
+import { convertLatexToMathML, isDisplayLatex, normalizeLatex } from './mathml.js';
 
 describe('extractLatex', () => {
   it('should extract content from $$...$$', () => {
@@ -106,6 +106,23 @@ describe('MathML Conversion', () => {
 
   it('should return empty string for invalid input', () => {
     expect(convertLatexToMathML('', true)).toBe('');
+  });
+});
+
+describe('normalizeLatex', () => {
+  it('should convert empty-base subsuperscripts to prescript form', () => {
+    const input = '{}_{3}^{0}R';
+    expect(normalizeLatex(input)).toBe('\\prescript{0}{3}{R}');
+  });
+
+  it('should support superscript declared before subscript', () => {
+    const input = '{}^{0}_{3}\\mathbf{R}';
+    expect(normalizeLatex(input)).toBe('\\prescript{0}{3}{\\mathbf{R}}');
+  });
+
+  it('should leave expressions without the pattern untouched', () => {
+    const input = 'R_{3}^{0}';
+    expect(normalizeLatex(input)).toBe('R_{3}^{0}');
   });
 });
 
